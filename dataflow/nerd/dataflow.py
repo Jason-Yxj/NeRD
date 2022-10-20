@@ -6,6 +6,7 @@ import nn_utils.math_utils as math_utils
 from dataflow.nerd.load_blender import load_blender_data
 from dataflow.nerd.load_nerf_blender import load_blender_data as load_nerf_blender_data
 from dataflow.nerd.load_real_world import load_llff_data
+from dataflow.nerd.load_scannet import load_scannet_data
 from nn_utils.nerf_layers import get_full_image_eval_grid
 from utils.training_setup_utils import get_num_gpus
 
@@ -30,7 +31,7 @@ def add_args(parser):
         type=str,
         default="blender",
         help="Currently only blender or real_world is available",
-        choices=["blender", "real_world", "nerf_blender"],
+        choices=["blender", "real_world", "nerf_blender", "scannet"],
     )
     parser.add_argument(
         "--testskip",
@@ -180,6 +181,38 @@ def pick_correct_dataset(args):
 
         near = tf.reduce_min(bds) * near
         far = tf.reduce_max(bds) * far
+    elif args.dataset_type == "scannet":
+        (images, masks, ev100s, poses, render_poses, i_test,) = load_scannet_data(
+            basedir=args.datadir, factor=args.rwfactor, spherify=args.spherify,
+        )
+
+        hwf = poses[0, :3, -1]
+        poses = poses[:, :3, :4]
+        print("Loaded real world", images.shape, render_poses.shape, hwf, args.datadir)
+        if not isinstance(i_test, list):
+            i_test = [i_test]
+
+        if args.rwholdout > 0:
+            print("Auto Real World holdout,", args.rwholdout)
+            i_test = np.arange(images.shape[0])[:: args.rwholdout]
+
+        i_val = i_test
+        i_train = np.array(
+            [
+                i
+                for i in np.arange(int(images.shape[0]))
+                if (i not in i_test and i not in i_val)
+            ]
+        )
+
+        wb_ref_image = np.array([False for _ in range(images.shape[0])])
+        # TODO make this configurable. Currently the reference image
+        # is a completely random one
+        ref_idx = np.random.choice(i_train, 1)
+        wb_ref_image[ref_idx] = True
+
+        near = args.near if args.near is not None else 2
+        far = args.far if args.far is not None else 6
 
     # Cast intrinsics to right types
     H, W, focal = hwf

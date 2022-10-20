@@ -15,7 +15,7 @@
                      "--basedir", "/cwang/home/yxj/Data/nerd",
                      "--expname", "scene0000_00",
                      "--gpu", "3",
-                     "--config", "configs/nerd/sacnnet.txt"]
+                     "--config", "configs/nerd/scannet.txt"]
         }
     ]
 }
