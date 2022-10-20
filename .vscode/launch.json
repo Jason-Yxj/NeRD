@@ -1,0 +1,21 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "train_nerd.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--datadir", "/cwang/home/yxj/datasets/nerd_data/scannet/scene0000_00",
+                     "--basedir", "/cwang/home/yxj/Data/nerd",
+                     "--expname", "scene0000_00",
+                     "--gpu", "3",
+                     "--config", "configs/nerd/sacnnet.txt"]
+        }
+    ]
+}
