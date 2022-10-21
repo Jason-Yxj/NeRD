@@ -11,10 +11,10 @@
             "program": "train_nerd.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--datadir", "/cwang/home/yxj/datasets/nerd_data/scannet/scene0101_04",
-                     "--basedir", "/cwang/home/yxj/Data/nerd",
+            "args": ["--datadir", "/root/autodl-tmp/scannet/scene0101_04",
+                     "--basedir", "/root/autodl-tmp/nerd_result",
                      "--expname", "scene0101_04",
-                     "--gpu", "3",
+                     "--gpu", "0,1,2",
                      "--config", "configs/nerd/scannet.txt"]
         }
     ]
