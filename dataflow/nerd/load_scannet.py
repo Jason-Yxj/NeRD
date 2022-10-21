@@ -194,6 +194,9 @@ def spherify_poses(poses, bds):
 def load_scannet_data(
     basedir, recenter=True, spherify=False, path_zflat=False,
 ):
+    H = 480
+    W = 640       
+
     poses = []
     pose_dir = os.path.join(basedir, "exported/pose")
     pose_files = os.listdir(pose_dir)
@@ -203,7 +206,7 @@ def load_scannet_data(
         w2c = np.loadtxt(pose_path)
         c2w = np.linalg.inv(w2c)
         poses.append(c2w[:3, :])
-    poses = np.array(poses).astype(np.float32)
+    poses = np.array(poses, dtype=np.float32)
 
     imgs = []
     img_dir = os.path.join(basedir, "exported/color")
@@ -211,24 +214,28 @@ def load_scannet_data(
     img_files.sort(key=lambda x: int(x[:-4]))
     img_paths = [os.path.join(img_dir, f) for f in img_files]
     for img_path in img_paths:
-        img = imageio.imread(img_path)
+        img = PIL.Image.open(img_path)
+        img = img.resize((W, H), PIL.Image.ANTIALIAS)
+        img = np.array(img)
         img = img[..., :3]/255.0 
         imgs.append(img)
-    images = np.stack(imgs, -1)
+    images = np.array(imgs, dtype=np.float32)
 
     intrinsic_path = os.path.join(basedir, "exported/intrinsic/intrinsic_color.txt")
     K = np.loadtxt(intrinsic_path)
-    f = K[0, 0]
-    n, h, w = images.shape[:3]
-    hwf = [[[h], [w], [f]]]
-    hwfs = np.tile(hwf, (n, 1, 1)) # nx3x1
+    n = len(img_paths)
+    h, w = imageio.imread(img_paths[0]).shape[:-1]
+    fx = K[0, 0] * (640 / w)
+    fy = K[1, 1] * (480 / h)    
+    hwf = [[[H], [W], [fx]]]
+    hwfs = np.tile(hwf, (n, 1, 1)).astype(np.float32) # nx3x1
     poses = np.concatenate((poses, hwfs), axis=-1)
 
-    masks = np.ones((n, h, w))
-    bd = [[2, 6]]
-    bds = np.tile(bd, (n, 1))
+    masks = np.ones((n, H, W, 1), dtype=np.float32)
+    bd = [[2.0, 6.0]]
+    bds = np.tile(bd, (n, 1)).astype(np.float32)
 
-    ev100s = handle_exif(basedir)
+    ev100s = np.array(n*[8.0], dtype=np.float32)
 
     if recenter:
         poses = recenter_poses(poses)
@@ -281,17 +288,5 @@ def load_scannet_data(
     dists = np.sum(np.square(c2w[:3, 3] - poses[:, :3, 3]), -1)
     i_test = np.argmin(dists)
     print("HOLDOUT view is", i_test)
-
-    images = images.astype(np.float32)
-    masks = masks.astype(np.float32)
-    poses = poses.astype(np.float32)
-
-    H = 480
-    W = 640
-    imgs = tf.image.resize(imgs, [H, W], method="area").numpy()
-    masks = tf.image.resize(masks, [H, W], method="area").numpy()   
-    fx = K[0, 0] * (630 / w)
-    fy = K[1, 1] * (480 / h)
-
 
     return images, masks, ev100s, poses, bds, render_poses, [H, W, fx, fy], i_test
