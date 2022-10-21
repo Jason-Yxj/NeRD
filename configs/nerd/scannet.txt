@@ -1,4 +1,4 @@
-batch_size = 1024
+batch_size = 2048
 learning_rate = 1e-4
 lrate_decay = 250
 
