@@ -182,11 +182,11 @@ def pick_correct_dataset(args):
         near = tf.reduce_min(bds) * near
         far = tf.reduce_max(bds) * far
     elif args.dataset_type == "scannet":
-        (images, masks, ev100s, poses, render_poses, i_test,) = load_scannet_data(
-            basedir=args.datadir, factor=args.rwfactor, spherify=args.spherify,
+        (images, masks, ev100s, poses, bds, render_poses, hwf, i_test,) = load_scannet_data(
+            basedir=args.datadir, spherify=args.spherify,
         )
 
-        hwf = poses[0, :3, -1]
+        # hwf = poses[0, :3, -1]
         poses = poses[:, :3, :4]
         print("Loaded real world", images.shape, render_poses.shape, hwf, args.datadir)
         if not isinstance(i_test, list):
@@ -215,9 +215,15 @@ def pick_correct_dataset(args):
         far = args.far if args.far is not None else 6
 
     # Cast intrinsics to right types
-    H, W, focal = hwf
-    H, W = int(H), int(W)
-    hwf = [H, W, focal]
+    if args.dataset_type == "scannet":
+        H, W, fx, fy = hwf
+        H, W = int(H), int(W)
+        hwf = [H, W, [fx, fy]]
+    else:
+        H, W, focal = hwf
+        H, W = int(H), int(W)
+        hwf = [H, W, focal]
+
 
     mean_ev100 = np.mean(ev100s)
 

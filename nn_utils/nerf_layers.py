@@ -515,11 +515,16 @@ def get_full_image_eval_grid(
     if jitter is not None:
         i = i + jitter[:, :, 1]
         j = j + jitter[:, :, 0]
-
+    
+    if len(focal) == 1:
+        fx = focal
+        fy = focal
+    else:
+        fx, fy = focal
     dirs = tf.stack(
         [
-            (i - float(W) * float(0.5)) / float(focal),
-            -(j - float(H) * float(0.5)) / float(focal),
+            (i - float(W) * float(0.5)) / float(fx),
+            -(j - float(H) * float(0.5)) / float(fy),
             -tf.ones_like(i),
         ],
         -1,

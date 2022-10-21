@@ -11,9 +11,9 @@
             "program": "train_nerd.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--datadir", "/cwang/home/yxj/datasets/nerd_data/scannet/scene0000_00",
+            "args": ["--datadir", "/cwang/home/yxj/datasets/nerd_data/scannet/scene0101_04",
                      "--basedir", "/cwang/home/yxj/Data/nerd",
-                     "--expname", "scene0000_00",
+                     "--expname", "scene0101_04",
                      "--gpu", "3",
                      "--config", "configs/nerd/scannet.txt"]
         }

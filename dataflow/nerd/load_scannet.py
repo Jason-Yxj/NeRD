@@ -7,91 +7,10 @@ import PIL.Image
 
 import utils.exif_helper as ehelp
 from utils.exposure_helper import calculate_ev100_from_metadata
+import tensorflow as tf
 
 # Slightly modified version of LLFF data loading code
 # see https://github.com/Fyusion/LLFF for original
-
-
-def _minify(basedir, factors=[], resolutions=[]):
-    needtoload = False
-    for r in factors:
-        imgdir = os.path.join(basedir, "images_{}".format(r))
-        maskdir = os.path.join(basedir, "masks_{}".format(r))
-        if not os.path.exists(imgdir) and not os.path.exists(maskdir):
-            needtoload = True
-    for r in resolutions:
-        imgdir = os.path.join(basedir, "images_{}x{}".format(r[1], r[0]))
-        maskdir = os.path.join(basedir, "masks_{}x{}".format(r[1], r[0]))
-        if not os.path.exists(imgdir) and not os.path.exists(maskdir):
-            needtoload = True
-    if not needtoload:
-        return
-
-    print("Minify needed...")
-
-    imgdir = os.path.join(basedir, "images")
-    maskdir = os.path.join(basedir, "masks")
-    imgs = [os.path.join(imgdir, f) for f in sorted(os.listdir(imgdir))]
-    masks = [os.path.join(maskdir, f) for f in sorted(os.listdir(maskdir))]
-    imgs = [
-        f
-        for f in imgs
-        if any([f.endswith(ex) for ex in ["JPG", "jpg", "png", "jpeg", "PNG"]])
-    ]
-    masks = [
-        f
-        for f in masks
-        if any([f.endswith(ex) for ex in ["JPG", "jpg", "png", "jpeg", "PNG"]])
-    ]
-    imgdir_orig = imgdir
-    maskdir_orig = maskdir
-
-    wd = os.getcwd()
-
-    for r in factors + resolutions:
-        if isinstance(r, int):
-            nameImg = "images_{}".format(r)
-            nameMask = "masks_{}".format(r)
-            resizearg = "{}%".format(100.0 / r)
-        else:
-            nameImg = "images_{}x{}".format(r[1], r[0])
-            nameMask = "masks_{}x{}".format(r[1], r[0])
-            resizearg = "{}x{}".format(r[1], r[0])
-        imgdir = os.path.join(basedir, nameImg)
-        maskdir = os.path.join(basedir, nameMask)
-        if os.path.exists(imgdir) and os.path.exists(maskdir):
-            continue
-
-        print("Minifying", r, basedir)
-
-        os.makedirs(imgdir)
-        os.makedirs(maskdir)
-        check_output("cp {}/* {}".format(imgdir_orig, imgdir), shell=True)
-        check_output("cp {}/* {}".format(maskdir_orig, maskdir), shell=True)
-
-        extImg = imgs[0].split(".")[-1]
-        extMask = masks[0].split(".")[-1]
-        argsImg = " ".join(
-            ["mogrify", "-resize", resizearg, "-format", "png", "*.{}".format(extImg)]
-        )
-        argsMask = " ".join(
-            ["mogrify", "-resize", resizearg, "-format", "png", "*.{}".format(extMask)]
-        )
-        os.chdir(imgdir)
-        check_output(argsImg, shell=True)
-        os.chdir(wd)
-
-        os.chdir(maskdir)
-        check_output(argsMask, shell=True)
-        os.chdir(wd)
-
-        if extImg != "png":
-            check_output("rm {}/*.{}".format(imgdir, extImg), shell=True)
-            print("Removed duplicates")
-        if extMask != "png":
-            check_output("rm {}/*.{}".format(maskdir, extMask), shell=True)
-            print("Removed duplicates")
-        print("Done")
 
 
 def ensureNoChannel(x: np.ndarray) -> np.ndarray:
@@ -100,91 +19,6 @@ def ensureNoChannel(x: np.ndarray) -> np.ndarray:
         ret = ret[:, :, 0]
 
     return ret
-
-
-def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
-    poses_arr = np.load(os.path.join(basedir, "poses_bounds.npy"))
-    poses = poses_arr[:, :-2].reshape([-1, 3, 5]).transpose([1, 2, 0])
-    bds = poses_arr[:, -2:].transpose([1, 0])
-
-    img0 = [
-        os.path.join(basedir, "images", f)
-        for f in sorted(os.listdir(os.path.join(basedir, "images")))
-        if f.endswith("JPG") or f.endswith("jpg") or f.endswith("png")
-    ][0]
-    sh = imageio.imread(img0).shape
-
-    ev100s = handle_exif(basedir)
-
-    sfx = ""
-
-    if factor is not None:
-        print("Apply factor", factor)
-        sfx = "_{}".format(factor)
-        _minify(basedir, factors=[factor])
-        factor = factor
-    elif height is not None:
-        factor = sh[0] / float(height)
-        width = int(sh[1] / factor)
-        _minify(basedir, resolutions=[[height, width]])
-        sfx = "_{}x{}".format(width, height)
-    elif width is not None:
-        factor = sh[1] / float(width)
-        height = int(sh[0] / factor)
-        _minify(basedir, resolutions=[[height, width]])
-        sfx = "_{}x{}".format(width, height)
-    else:
-        factor = 1
-
-    imgdir = os.path.join(basedir, "images" + sfx)
-    maskdir = os.path.join(basedir, "masks" + sfx)
-    if not os.path.exists(imgdir):
-        print(imgdir, "does not exist, returning")
-        return
-
-    if not os.path.exists(maskdir):
-        print(maskdir, "does not exist, returning")
-        return
-
-    imgfiles = [
-        os.path.join(imgdir, f)
-        for f in sorted(os.listdir(imgdir))
-        if f.endswith("JPG") or f.endswith("jpg") or f.endswith("png")
-    ]
-    masksfiles = [
-        os.path.join(maskdir, f)
-        for f in sorted(os.listdir(maskdir))
-        if f.endswith("JPG") or f.endswith("jpg") or f.endswith("png")
-    ]
-    if poses.shape[-1] != len(imgfiles) and len(imgfiles) == len(masksfiles):
-        print(
-            "Mismatch between imgs {}, masks {} and poses {} !!!!".format(
-                len(imgfiles), len(masksfiles), poses.shape[-1]
-            )
-        )
-        return
-
-    sh = imageio.imread(imgfiles[0]).shape
-    poses[:2, 4, :] = np.array(sh[:2]).reshape([2, 1])
-    poses[2, 4, :] = poses[2, 4, :] * 1.0 / factor
-
-    if not load_imgs:
-        return poses, bds
-
-    def imread(f):
-        if f.endswith("png"):
-            return imageio.imread(f, ignoregamma=True)
-        else:
-            return imageio.imread(f)
-
-    imgs = [imread(f)[..., :3] / 255.0 for f in imgfiles]
-    masks = [ensureNoChannel(imread(f) / 255.0) for f in masksfiles]
-
-    imgs = np.stack(imgs, -1)
-    masks = np.stack(masks, -1)
-
-    print("Loaded image data", imgs.shape, masks.shape, poses[:, -1, 0])
-    return poses, bds, imgs, masks, ev100s
 
 
 def handle_exif(basedir):
@@ -358,38 +192,43 @@ def spherify_poses(poses, bds):
 
 
 def load_scannet_data(
-    basedir, factor=8, recenter=True, spherify=False, path_zflat=False,
+    basedir, recenter=True, spherify=False, path_zflat=False,
 ):
     poses = []
     pose_dir = os.path.join(basedir, "exported/pose")
-    pose_paths = os.listdir(pose_dir)
+    pose_files = os.listdir(pose_dir)
+    pose_files.sort(key=lambda x: int(x[:-4]))
+    pose_paths = [os.path.join(pose_dir, f) for f in pose_files]
     for pose_path in pose_paths:
         w2c = np.loadtxt(pose_path)
         c2w = np.linalg.inv(w2c)
-        poses.append(c2w)
+        poses.append(c2w[:3, :])
     poses = np.array(poses).astype(np.float32)
 
     imgs = []
-    img_dir = os.paath.join(basedir, "exported/color")
-    img_paths = os.listdir(img_dir)
+    img_dir = os.path.join(basedir, "exported/color")
+    img_files = os.listdir(img_dir)
+    img_files.sort(key=lambda x: int(x[:-4]))
+    img_paths = [os.path.join(img_dir, f) for f in img_files]
     for img_path in img_paths:
         img = imageio.imread(img_path)
         img = img[..., :3]/255.0 
         imgs.append(img)
-    images = np.array(imgs)
+    images = np.stack(imgs, -1)
 
     intrinsic_path = os.path.join(basedir, "exported/intrinsic/intrinsic_color.txt")
     K = np.loadtxt(intrinsic_path)
     f = K[0, 0]
-    n, h, w = images.shape
-    hwf = [h, w, f]
-    poses = np.concatenate((poses, hwf), axis=-1)
+    n, h, w = images.shape[:3]
+    hwf = [[[h], [w], [f]]]
+    hwfs = np.tile(hwf, (n, 1, 1)) # nx3x1
+    poses = np.concatenate((poses, hwfs), axis=-1)
 
-    masks = np.ones_like(images)
+    masks = np.ones((n, h, w))
+    bd = [[2, 6]]
+    bds = np.tile(bd, (n, 1))
 
     ev100s = handle_exif(basedir)
-    
-    print("Loaded", basedir, bds.min(), bds.max())
 
     if recenter:
         poses = recenter_poses(poses)
@@ -447,4 +286,12 @@ def load_scannet_data(
     masks = masks.astype(np.float32)
     poses = poses.astype(np.float32)
 
-    return images, masks, ev100s, poses, render_poses, i_test
+    H = 480
+    W = 640
+    imgs = tf.image.resize(imgs, [H, W], method="area").numpy()
+    masks = tf.image.resize(masks, [H, W], method="area").numpy()   
+    fx = K[0, 0] * (630 / w)
+    fy = K[1, 1] * (480 / h)
+
+
+    return images, masks, ev100s, poses, bds, render_poses, [H, W, fx, fy], i_test
